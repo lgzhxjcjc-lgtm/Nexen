@@ -1,69 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Image as ImageIcon, Youtube, Download, Sparkles, TrendingUp, BarChart2, Hash, FileText, Loader2, Play, Activity, LayoutTemplate, Wand2, History, Trash2, Key, Search, Zap, Target, Lightbulb, Sliders, ImagePlus, Video, Film, Camera } from 'lucide-react';
+import { Upload, Image as ImageIcon, Youtube, Download, Sparkles, TrendingUp, BarChart2, Hash, FileText, Loader2, Play, Activity, LayoutTemplate, Wand2, History, Trash2, Key, Search, Zap, Target, Lightbulb } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from '@google/genai';
 
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
 type HistoryItem = {
   id: string;
-  type: 'visual' | 'autothumb' | 'seo' | 'keyword' | 'editor' | 'video';
+  type: 'visual' | 'autothumb' | 'seo' | 'keyword';
   title: string;
   imageUrl?: string;
-  videoUrl?: string;
   seoData?: any;
   timestamp: number;
 };
 
 export default function App() {
-  const [hasApiKey, setHasApiKey] = useState(true);
-  const [activeTab, setActiveTab] = useState<'visual' | 'autothumb' | 'seo' | 'keyword' | 'editor' | 'history'>('visual');
+  const [activeTab, setActiveTab] = useState<'visual' | 'autothumb' | 'seo' | 'keyword' | 'history'>('visual');
   const [history, setHistory] = useState<HistoryItem[]>([]);
-
-  // Pro Editor State
-  const [editorMode, setEditorMode] = useState<'photo' | 'video'>('photo');
-  const [editorImage, setEditorImage] = useState<string | null>(null);
-  const [editorPrompt, setEditorPrompt] = useState('');
-  const [editorStyle, setEditorStyle] = useState('Cinematic Color Grade (Teal & Orange)');
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedImageUrl, setEditedImageUrl] = useState<string | null>(null);
-
-  // Video Editor State
-  const [videoBaseImage, setVideoBaseImage] = useState<string | null>(null);
-  const [videoPrompt, setVideoPrompt] = useState('');
-  const [videoAspectRatio, setVideoAspectRatio] = useState('16:9');
-  const [videoResolution, setVideoResolution] = useState('1080p');
-  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
-  const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    const checkApiKey = async () => {
-      try {
-        // @ts-ignore
-        if (window.aistudio?.hasSelectedApiKey) {
-          // @ts-ignore
-          const keySelected = await window.aistudio.hasSelectedApiKey();
-          setHasApiKey(keySelected);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    checkApiKey();
-  }, []);
-
-  const handleSelectApiKey = async () => {
-    try {
-      // @ts-ignore
-      if (window.aistudio?.openSelectKey) {
-        // @ts-ignore
-        await window.aistudio.openSelectKey();
-        setHasApiKey(true);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const getAI = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
   
   // Visual Studio State
   const [youtubeUrl, setYoutubeUrl] = useState('');
@@ -170,7 +123,7 @@ export default function App() {
         });
       }
 
-      const response = await getAI().models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: { parts }
       });
@@ -241,7 +194,7 @@ export default function App() {
         });
       }
 
-      const response = await getAI().models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: { parts },
         config: {
@@ -279,7 +232,7 @@ export default function App() {
     setSeoData(null);
 
     try {
-      const response = await getAI().models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-3.1-pro-preview',
         contents: `Analyze this YouTube video URL: ${seoUrl}.
         1. Provide a detailed analysis of what the video is about based on search/context.
@@ -314,136 +267,6 @@ export default function App() {
     }
   };
 
-  // --- Pro Editor Functions ---
-  const handleProEdit = async () => {
-    if (!editorImage) return alert("Please upload an image to edit.");
-    setIsEditing(true);
-    setEditedImageUrl(null);
-
-    try {
-      const base64Data = editorImage.split(',')[1];
-      const mimeType = editorImage.split(';')[0].split(':')[1];
-
-      const finalPrompt = `You are an elite professional photo editor and retoucher. 
-      Apply the following 1-Click Pro Effect to the image: "${editorStyle}".
-      ${editorPrompt ? `Additional specific instructions from the client: "${editorPrompt}".` : ''}
-      Ensure flawless execution, perfect color grading, and ultra-high resolution output.`;
-
-      const response = await getAI().models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: {
-          parts: [
-            { inlineData: { data: base64Data, mimeType } },
-            { text: finalPrompt }
-          ]
-        }
-      });
-
-      let newImageUrl = null;
-      for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-          newImageUrl = `data:image/png;base64,${part.inlineData.data}`;
-          break;
-        }
-      }
-
-      if (newImageUrl) {
-        setEditedImageUrl(newImageUrl);
-        addToHistory({
-          type: 'editor',
-          title: `Pro Edit: ${editorStyle.split(' ')[0]}...`,
-          imageUrl: newImageUrl
-        });
-      } else {
-        alert("Failed to generate edited image.");
-      }
-    } catch (error) {
-      console.error("Editing error:", error);
-      alert("An error occurred during editing.");
-    } finally {
-      setIsEditing(false);
-    }
-  };
-
-  // --- Video Editor Functions ---
-  const handleGenerateVideo = async () => {
-    if (!videoPrompt && !videoBaseImage) return alert("Please provide a prompt or a base image.");
-    setIsGeneratingVideo(true);
-    setGeneratedVideoUrl(null);
-
-    try {
-      const ai = getAI();
-      let operation;
-      
-      if (videoBaseImage) {
-        const base64Data = videoBaseImage.split(',')[1];
-        const mimeType = videoBaseImage.split(';')[0].split(':')[1];
-        
-        operation = await ai.models.generateVideos({
-          model: 'veo-3.1-fast-generate-preview',
-          prompt: videoPrompt || 'Cinematic motion, highly detailed, 4k resolution',
-          image: {
-            imageBytes: base64Data,
-            mimeType: mimeType,
-          },
-          config: {
-            numberOfVideos: 1,
-            resolution: videoResolution,
-            aspectRatio: videoAspectRatio
-          }
-        });
-      } else {
-        operation = await ai.models.generateVideos({
-          model: 'veo-3.1-fast-generate-preview',
-          prompt: videoPrompt,
-          config: {
-            numberOfVideos: 1,
-            resolution: videoResolution,
-            aspectRatio: videoAspectRatio
-          }
-        });
-      }
-
-      while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        operation = await ai.operations.getVideosOperation({operation: operation});
-      }
-
-      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-      
-      if (downloadLink) {
-        const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-        const videoResponse = await fetch(downloadLink, {
-          method: 'GET',
-          headers: {
-            'x-goog-api-key': apiKey as string,
-          },
-        });
-        const blob = await videoResponse.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        
-        setGeneratedVideoUrl(blobUrl);
-        addToHistory({
-          type: 'video',
-          title: `Pro Video: ${videoPrompt ? videoPrompt.substring(0, 20) : 'From Image'}...`,
-          videoUrl: blobUrl
-        });
-      } else {
-        alert("Failed to generate video.");
-      }
-    } catch (error: any) {
-      console.error("Video generation error:", error);
-      if (error.message?.includes("Requested entity was not found")) {
-         setHasApiKey(false);
-         alert("API Key error. Please select your API key again.");
-      } else {
-         alert("An error occurred during video generation. This can take a few minutes, please ensure your API key has billing enabled.");
-      }
-    } finally {
-      setIsGeneratingVideo(false);
-    }
-  };
-
   // --- Keyword Magic Functions ---
   const handleGenerateKeywords = async () => {
     if (!seedKeyword) return alert("Please enter a keyword or topic.");
@@ -451,7 +274,7 @@ export default function App() {
     setKeywordData(null);
 
     try {
-      const response = await getAI().models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-3.1-pro-preview',
         contents: `Act as an elite SEO expert and viral content strategist. Analyze the current trends for the keyword/topic: "${seedKeyword}" across YouTube, Google, and all social media platforms.
         Generate highly optimized, viral SEO metadata designed to rank #1 and go viral.
@@ -507,31 +330,6 @@ export default function App() {
       </div>
     );
   };
-
-  if (!hasApiKey) {
-    return (
-      <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4 font-sans">
-        <div className="bg-[#0f0f13] p-10 rounded-[2rem] border border-white/10 max-w-md w-full text-center space-y-6 shadow-2xl">
-          <div className="w-20 h-20 bg-cyan-500/10 text-cyan-400 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Key className="w-10 h-10" />
-          </div>
-          <h2 className="text-3xl font-bold text-white">API Key Required</h2>
-          <p className="text-gray-400 leading-relaxed">
-            To use the advanced Veo Video Generation and Pro Image models, you must select a paid Google Cloud API key.
-          </p>
-          <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="text-cyan-400 hover:text-cyan-300 text-sm font-medium block mb-6">
-            Learn more about billing &rarr;
-          </a>
-          <button
-            onClick={handleSelectApiKey}
-            className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-black font-bold py-4 px-6 rounded-xl transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)]"
-          >
-            Select API Key
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#050505] text-white p-4 md:p-8 font-sans selection:bg-cyan-500/30 overflow-x-hidden">
@@ -606,17 +404,6 @@ export default function App() {
           >
             <Zap className="w-5 h-5" />
             Viral Keywords
-          </button>
-          <button
-            onClick={() => setActiveTab('editor')}
-            className={`px-6 py-3 rounded-2xl font-semibold flex items-center gap-2 transition-all ${
-              activeTab === 'editor' 
-                ? 'bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-cyan-500/50 text-white shadow-[0_0_30px_rgba(6,182,212,0.15)]' 
-                : 'bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <Sliders className="w-5 h-5" />
-            Pro Editor
           </button>
           <button
             onClick={() => setActiveTab('history')}
@@ -1361,273 +1148,7 @@ export default function App() {
           )}
 
           {/* ========================================== */}
-          {/* TAB 5: PRO EDITOR                          */}
-          {/* ========================================== */}
-          {activeTab === 'editor' && (
-            <motion.div
-              key="editor"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-              className="bg-[#0f0f13]/80 backdrop-blur-2xl border border-white/10 rounded-[2rem] p-6 md:p-10 shadow-2xl space-y-8"
-            >
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-3 rounded-xl bg-cyan-500/10 text-cyan-400">
-                  <Sliders className="w-6 h-6" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white">Pro Studio</h2>
-                  <p className="text-sm text-gray-400">Advanced AI photo and video editing capabilities.</p>
-                </div>
-              </div>
-
-              {/* Toggle Switch */}
-              <div className="flex bg-black/40 p-1 rounded-xl w-fit mb-8 border border-white/10">
-                <button
-                  onClick={() => setEditorMode('photo')}
-                  className={`px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 transition-all ${editorMode === 'photo' ? 'bg-cyan-500 text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}
-                >
-                  <Camera className="w-4 h-4" /> Photo Editor
-                </button>
-                <button
-                  onClick={() => setEditorMode('video')}
-                  className={`px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 transition-all ${editorMode === 'video' ? 'bg-purple-500 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
-                >
-                  <Film className="w-4 h-4" /> Video Studio
-                </button>
-              </div>
-
-              {editorMode === 'photo' ? (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                  {/* Left: Controls */}
-                  <div className="space-y-6">
-                    {/* Image Upload */}
-                    <div className="border-2 border-dashed border-white/10 rounded-2xl p-8 text-center hover:border-cyan-500/50 transition-colors relative group bg-black/20">
-                      <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, setEditorImage)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                      {editorImage ? (
-                        <div className="relative w-full max-w-sm mx-auto aspect-square rounded-xl overflow-hidden shadow-lg">
-                          <img src={editorImage} alt="To edit" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <p className="text-white font-medium flex items-center gap-2"><Upload className="w-5 h-5" /> Replace Image</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-4 py-10">
-                          <div className="w-20 h-20 rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400 mb-2">
-                            <ImagePlus className="w-10 h-10" />
-                          </div>
-                          <div>
-                            <p className="text-gray-200 font-bold text-lg">Upload Image to Edit</p>
-                            <p className="text-gray-500 text-sm mt-1">Drag & drop or click to browse (JPG, PNG)</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 1-Click Presets */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">1-Click Pro Effects</label>
-                      <select
-                        value={editorStyle}
-                        onChange={(e) => setEditorStyle(e.target.value)}
-                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all text-gray-200 appearance-none font-medium"
-                      >
-                        <option value="Cinematic Color Grade (Teal & Orange)">🎬 Cinematic Color Grade (Teal & Orange)</option>
-                        <option value="Cyberpunk Aesthetic (Neon, Dark, Gritty)">🌆 Cyberpunk Aesthetic (Neon, Dark, Gritty)</option>
-                        <option value="Studio Lighting Enhancement (Soft & Professional)">💡 Studio Lighting Enhancement</option>
-                        <option value="Remove Background & Make Transparent">✂️ Remove Background & Make Transparent</option>
-                        <option value="Turn into High-Quality Anime Style">✨ Turn into High-Quality Anime Style</option>
-                        <option value="Make it Epic & Dramatic (High Contrast)">🔥 Make it Epic & Dramatic (High Contrast)</option>
-                        <option value="Vintage Film Look (Grain, Warm Tones)">🎞️ Vintage Film Look (Grain, Warm Tones)</option>
-                        <option value="Professional Retouching (Smooth Skin, Bright Eyes)">✨ Professional Retouching</option>
-                      </select>
-                    </div>
-
-                    {/* Custom Prompt */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Advanced Custom Instructions (Optional)</label>
-                      <textarea
-                        placeholder="e.g., 'Make the sky purple', 'Add sunglasses to the person', 'Change the background to a futuristic city'..."
-                        value={editorPrompt}
-                        onChange={(e) => setEditorPrompt(e.target.value)}
-                        rows={3}
-                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all placeholder:text-gray-600 text-gray-200 resize-none"
-                      />
-                    </div>
-
-                    <button
-                      onClick={handleProEdit}
-                      disabled={!editorImage || isEditing}
-                      className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 disabled:opacity-50 disabled:cursor-not-allowed text-black rounded-xl px-6 py-4 font-bold transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_30px_rgba(6,182,212,0.5)] flex items-center justify-center gap-2"
-                    >
-                      {isEditing ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Applying Pro Edits...
-                        </>
-                      ) : (
-                        <>
-                          <Wand2 className="w-5 h-5" />
-                          Apply Pro Edits
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Right: Result */}
-                  <div className="flex flex-col h-full">
-                    <div className="flex-1 bg-black/40 border border-white/10 rounded-2xl flex items-center justify-center overflow-hidden relative min-h-[400px]">
-                      {editedImageUrl ? (
-                        <div className="w-full h-full relative group">
-                          <img src={editedImageUrl} alt="Edited Result" className="w-full h-full object-contain p-2" />
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 backdrop-blur-sm">
-                            <button 
-                              onClick={() => handleDownload(editedImageUrl, 'pro-edit-high-res.png')}
-                              className="bg-white text-black px-6 py-3 rounded-full font-bold flex items-center gap-2 hover:scale-105 transition-transform"
-                            >
-                              <Download className="w-5 h-5" />
-                              High-Res PNG
-                            </button>
-                            <button 
-                              onClick={() => handleDownload(editedImageUrl, 'pro-edit-web.jpg')}
-                              className="bg-cyan-500 text-black px-6 py-3 rounded-full font-bold flex items-center gap-2 hover:scale-105 transition-transform"
-                            >
-                              <Download className="w-5 h-5" />
-                              Web JPG
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center p-8">
-                          <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
-                            <ImageIcon className="w-10 h-10 text-gray-600" />
-                          </div>
-                          <p className="text-gray-500 font-medium">Your pro-edited image will appear here</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                  {/* Left: Controls */}
-                  <div className="space-y-6">
-                    {/* Base Image Upload */}
-                    <div className="border-2 border-dashed border-white/10 rounded-2xl p-6 text-center hover:border-purple-500/50 transition-colors relative group bg-black/20">
-                      <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, setVideoBaseImage)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                      {videoBaseImage ? (
-                        <div className="relative w-full max-w-sm mx-auto aspect-video rounded-xl overflow-hidden shadow-lg">
-                          <img src={videoBaseImage} alt="Base" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <p className="text-white font-medium flex items-center gap-2"><Upload className="w-5 h-5" /> Replace Base Image</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-3 py-6">
-                          <div className="w-16 h-16 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400 mb-2">
-                            <ImagePlus className="w-8 h-8" />
-                          </div>
-                          <div>
-                            <p className="text-gray-200 font-bold">Upload Starting Frame (Optional)</p>
-                            <p className="text-gray-500 text-sm mt-1">Animate a photo into a video</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Prompt */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Video Prompt / Motion Instructions</label>
-                      <textarea
-                        placeholder="e.g., 'A cinematic drone shot flying over a neon cyberpunk city, 4k, highly detailed...'"
-                        value={videoPrompt}
-                        onChange={(e) => setVideoPrompt(e.target.value)}
-                        rows={3}
-                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/50 transition-all placeholder:text-gray-600 text-gray-200 resize-none"
-                      />
-                    </div>
-
-                    {/* Settings */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Aspect Ratio</label>
-                        <select
-                          value={videoAspectRatio}
-                          onChange={(e) => setVideoAspectRatio(e.target.value)}
-                          className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/50 transition-all text-gray-200 appearance-none"
-                        >
-                          <option value="16:9">16:9 (Landscape)</option>
-                          <option value="9:16">9:16 (Portrait / Shorts)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Resolution</label>
-                        <select
-                          value={videoResolution}
-                          onChange={(e) => setVideoResolution(e.target.value)}
-                          className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/50 transition-all text-gray-200 appearance-none"
-                        >
-                          <option value="1080p">1080p (High Quality)</option>
-                          <option value="720p">720p (Faster)</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={handleGenerateVideo}
-                      disabled={(!videoPrompt && !videoBaseImage) || isGeneratingVideo}
-                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl px-6 py-4 font-bold transition-all shadow-[0_0_20px_rgba(168,85,247,0.3)] hover:shadow-[0_0_30px_rgba(168,85,247,0.5)] flex items-center justify-center gap-2"
-                    >
-                      {isGeneratingVideo ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Generating Video (Takes 1-2 mins)...
-                        </>
-                      ) : (
-                        <>
-                          <Film className="w-5 h-5" />
-                          Generate Pro Video
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Right: Result */}
-                  <div className="flex flex-col h-full">
-                    <div className="flex-1 bg-black/40 border border-white/10 rounded-2xl flex items-center justify-center overflow-hidden relative min-h-[400px]">
-                      {generatedVideoUrl ? (
-                        <div className="w-full h-full relative group flex flex-col items-center justify-center p-4">
-                          <video src={generatedVideoUrl} controls autoPlay loop className="w-full max-h-full rounded-xl shadow-2xl bg-black" />
-                          <div className="mt-4">
-                            <a 
-                              href={generatedVideoUrl}
-                              download="nexus-pro-video.mp4"
-                              className="bg-purple-500 text-white px-6 py-3 rounded-full font-bold flex items-center gap-2 hover:scale-105 transition-transform"
-                            >
-                              <Download className="w-5 h-5" />
-                              Download Video
-                            </a>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center p-8">
-                          <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
-                            <Video className="w-10 h-10 text-gray-600" />
-                          </div>
-                          <p className="text-gray-500 font-medium">Your generated video will appear here</p>
-                          {isGeneratingVideo && <p className="text-purple-400 text-sm mt-4 animate-pulse">AI is rendering frames... Please wait.</p>}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* ========================================== */}
-          {/* TAB 6: HISTORY                             */}
+          {/* TAB 5: HISTORY                             */}
           {/* ========================================== */}
           {activeTab === 'history' && (
             <motion.div
@@ -1686,31 +1207,13 @@ export default function App() {
                         {item.type === 'autothumb' && <LayoutTemplate className="w-4 h-4 text-emerald-400" />}
                         {item.type === 'seo' && <TrendingUp className="w-4 h-4 text-pink-400" />}
                         {item.type === 'keyword' && <Zap className="w-4 h-4 text-yellow-400" />}
-                        {item.type === 'editor' && <Sliders className="w-4 h-4 text-cyan-400" />}
-                        {item.type === 'video' && <Film className="w-4 h-4 text-purple-400" />}
                         <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                          {item.type === 'autothumb' ? 'Auto Thumb' : item.type === 'editor' ? 'Pro Edit' : item.type === 'video' ? 'Pro Video' : item.type}
+                          {item.type === 'autothumb' ? 'Auto Thumb' : item.type}
                         </span>
                       </div>
                       
                       <h3 className="font-bold text-white mb-1 truncate pr-8" title={item.title}>{item.title}</h3>
                       <p className="text-xs text-gray-500 mb-4">{new Date(item.timestamp).toLocaleString()}</p>
-
-                      {item.videoUrl && (
-                        <div className="space-y-3">
-                          <div className="aspect-video rounded-lg overflow-hidden bg-black/50 border border-white/5 relative">
-                            <video src={item.videoUrl} controls className="w-full h-full object-cover" />
-                          </div>
-                          <a 
-                            href={item.videoUrl}
-                            download={`nexus-history-${item.id}.mp4`}
-                            className="w-full bg-white/10 hover:bg-white/20 text-white rounded-xl py-2 text-sm font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                          >
-                            <Download className="w-4 h-4" />
-                            Download Video
-                          </a>
-                        </div>
-                      )}
 
                       {item.imageUrl && (
                         <div className="space-y-3">
